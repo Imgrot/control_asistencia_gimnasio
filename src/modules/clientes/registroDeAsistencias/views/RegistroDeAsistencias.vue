@@ -1,27 +1,31 @@
 <template>
-
   <div class="d-flex justify-content-center mt-4">
-    <div class="w-100" style="max-width: 1100px;">
-      <h2 class="mb-4 text-center text-md-start">
-        Registro de asistencias de clientes
-      </h2>
+    <div class="w-100 contenedor-registro">
 
-      <!-- el filtroh-->
-      <div class="card mb-4">
+      <!-- TÍTULO -->
+      <div class="titulo-seccion mb-4">
+        <h2 class="fw-bold">Registro de asistencias de clientes</h2>
+        <p class="text-muted">Consulta las asistencias de los socios mediante filtros</p>
+      </div>
+
+      <!-- FILTROS -->
+      <div class="card sombra-suave mb-4">
         <div class="card-body">
+
           <form class="row g-3">
+
             <div class="col-md-4">
-              <label class="form-label">Buscar por nombre o RUT</label>
+              <label class="form-label fw-semibold">Buscar por nombre o RUT</label>
               <input v-model="filtroTexto" type="text" class="form-control" placeholder="Ej: Juan o 12.345.678-9" />
             </div>
 
             <div class="col-md-3">
-              <label class="form-label">Fecha desde</label>
+              <label class="form-label fw-semibold">Fecha desde</label>
               <input v-model="fechaDesde" type="date" class="form-control" />
             </div>
 
             <div class="col-md-3">
-              <label class="form-label">Fecha hasta</label>
+              <label class="form-label fw-semibold">Fecha hasta</label>
               <input v-model="fechaHasta" type="date" class="form-control" />
             </div>
 
@@ -30,27 +34,31 @@
                 Limpiar
               </button>
             </div>
+
           </form>
+
         </div>
       </div>
 
-      <!-- La tablita -->
-      <div class="card">
+      <!-- TABLA -->
+      <div class="card sombra-suave">
         <div class="card-body">
-          <h5 class="card-title">Listado de asistencias</h5>
+
+          <h5 class="fw-semibold mb-3">Listado de asistencias</h5>
 
           <div v-if="asistenciasFiltradas.length">
-            <table class="table table-striped table-hover align-middle mb-0">
+            <table class="table table-hover tabla-estilada align-middle mb-0">
               <thead>
                 <tr>
-                  <th scope="col">Fecha</th>
-                  <th scope="col">Hora</th>
-                  <th scope="col">Cliente</th>
-                  <th scope="col">RUT</th>
-                  <th scope="col">Plan</th>
-                  <th scope="col">Estado membresía</th>
+                  <th>Fecha</th>
+                  <th>Hora</th>
+                  <th>Cliente</th>
+                  <th>RUT</th>
+                  <th>Plan</th>
+                  <th>Estado membresía</th>
                 </tr>
               </thead>
+
               <tbody>
                 <tr v-for="(a, index) in asistenciasFiltradas" :key="index">
                   <td>{{ a.fecha }}</td>
@@ -58,34 +66,36 @@
                   <td>{{ a.nombre }}</td>
                   <td>{{ a.rut }}</td>
                   <td>{{ a.plan }}</td>
+
                   <td>
                     <span :class="[
                       'badge',
-                      a.estadoMembresia === 'Activa'
-                        ? 'bg-success'
-                        : 'bg-danger'
+                      a.estadoMembresia === 'Activa' ? 'bg-success' : 'bg-danger'
                     ]">
                       {{ a.estadoMembresia }}
                     </span>
                   </td>
                 </tr>
               </tbody>
+
             </table>
           </div>
 
-          <p v-else class="text-muted mb-0">
+          <p v-else class="mb-0 text-muted">
             No hay asistencias que coincidan con los filtros seleccionados.
           </p>
+
         </div>
       </div>
+
     </div>
   </div>
 </template>
 
+
 <script setup>
 import { ref, computed } from 'vue'
 
-// Datos que simulé x mientras
 const asistenciasBase = ref([
   {
     fecha: '2025-11-10',
@@ -113,15 +123,14 @@ const asistenciasBase = ref([
   }
 ])
 
-// lo del Filtroh
 const filtroTexto = ref('')
 const fechaDesde = ref('')
 const fechaHasta = ref('')
 
-// el Computed para aplicar los filtros
 const asistenciasFiltradas = computed(() => {
-  return asistenciasBase.value.filter((a) => {
+  return asistenciasBase.value.filter(a => {
     const texto = filtroTexto.value.trim().toLowerCase()
+
     const coincideTexto =
       !texto ||
       a.nombre.toLowerCase().includes(texto) ||
@@ -130,11 +139,11 @@ const asistenciasFiltradas = computed(() => {
     const desde = fechaDesde.value
     const hasta = fechaHasta.value
 
-    const dentroDeRango =
+    const enRango =
       (!desde || a.fecha >= desde) &&
       (!hasta || a.fecha <= hasta)
 
-    return coincideTexto && dentroDeRango
+    return coincideTexto && enRango
   })
 })
 
@@ -144,3 +153,24 @@ const limpiarFiltros = () => {
   fechaHasta.value = ''
 }
 </script>
+
+
+<style scoped>
+.contenedor-registro {
+  max-width: 1100px;
+}
+
+.sombra-suave {
+  border-radius: 10px;
+  box-shadow: 0px 3px 12px rgba(0, 0, 0, .08);
+}
+
+.tabla-estilada thead tr {
+  background: #f5f5f5;
+  border-bottom: 2px solid #ddd;
+}
+
+.titulo-seccion h2 {
+  font-size: 1.6rem;
+}
+</style>
