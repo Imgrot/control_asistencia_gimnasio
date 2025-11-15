@@ -1,176 +1,201 @@
 <template>
   <div class="d-flex justify-content-center mt-4">
-    <div class="w-100 contenedor-registro">
+    <div class="w-100" style="max-width: 1100px;">
+      <h2 class="mb-4 text-center text-md-start">Registro de asistencias de clientes</h2>
 
-      <!-- TÍTULO -->
-      <div class="titulo-seccion mb-4">
-        <h2 class="fw-bold">Registro de asistencias de clientes</h2>
-        <p class="text-muted">Consulta las asistencias de los socios mediante filtros</p>
-      </div>
-
-      <!-- FILTROS -->
-      <div class="card sombra-suave mb-4">
+      <div class="card mb-4">
         <div class="card-body">
+          <form class="row g-3" @submit.prevent="buscar">
 
-          <form class="row g-3">
+            <div class="col-12 d-flex align-items-center gap-3">
+              <span class="fw-semibold">Buscar por:</span>
 
-            <div class="col-md-4">
-              <label class="form-label fw-semibold">Buscar por nombre o RUT</label>
-              <input v-model="filtroTexto" type="text" class="form-control" placeholder="Ej: Juan o 12.345.678-9" />
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" v-model="busquedaPorNombre">
+                <label class="form-check-label">
+                  {{ busquedaPorNombre ? "Nombre" : "RUT" }}
+                </label>
+              </div>
             </div>
 
-            <div class="col-md-3">
-              <label class="form-label fw-semibold">Fecha desde</label>
-              <input v-model="fechaDesde" type="date" class="form-control" />
+            <div class="col-md-8" v-if="!busquedaPorNombre">
+              <label class="form-label">RUT</label>
+              <input v-model="rut" type="text" class="form-control" placeholder="12.345.678-9" />
             </div>
 
-            <div class="col-md-3">
-              <label class="form-label fw-semibold">Fecha hasta</label>
-              <input v-model="fechaHasta" type="date" class="form-control" />
+            <div class="col-md-8" v-else>
+              <label class="form-label">Nombre o Apellidos</label>
+              <input v-model="nombreBusqueda" type="text" class="form-control"
+                placeholder="Ej: Juan / Soto / Pérez Soto" />
             </div>
 
-            <div class="col-md-2 d-flex align-items-end">
-              <button type="button" class="btn btn-outline-secondary w-100" @click="limpiarFiltros">
-                Limpiar
-              </button>
+            <div class="col-md-4 d-flex align-items-end">
+              <button type="submit" class="btn btn-primary w-100">Buscar</button>
             </div>
 
           </form>
-
         </div>
       </div>
 
-      <!-- TABLA -->
-      <div class="card sombra-suave">
+      <div v-if="buscado && coincidencias.length === 0 && !clienteSeleccionado" class="alert alert-warning">
+        No se encontraron coincidencias.
+      </div>
+
+      <div v-if="coincidencias.length > 0" class="card mb-4">
         <div class="card-body">
+          <h5 class="mb-3">Coincidencias encontradas</h5>
 
-          <h5 class="fw-semibold mb-3">Listado de asistencias</h5>
+          <DataTable :value="coincidencias" tableStyle="min-width: 100%">
+            <Column field="rut" header="RUT" />
+            <Column field="nombres" header="Nombres" />
+            <Column field="apellidos" header="Apellidos" />
+            <Column field="tipo_membresia" header="Membresía" />
 
-          <div v-if="asistenciasFiltradas.length">
-            <table class="table table-hover tabla-estilada align-middle mb-0">
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Hora</th>
-                  <th>Cliente</th>
-                  <th>RUT</th>
-                  <th>Plan</th>
-                  <th>Estado membresía</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                <tr v-for="(a, index) in asistenciasFiltradas" :key="index">
-                  <td>{{ a.fecha }}</td>
-                  <td>{{ a.hora }}</td>
-                  <td>{{ a.nombre }}</td>
-                  <td>{{ a.rut }}</td>
-                  <td>{{ a.plan }}</td>
-
-                  <td>
-                    <span :class="[
-                      'badge',
-                      a.estadoMembresia === 'Activa' ? 'bg-success' : 'bg-danger'
-                    ]">
-                      {{ a.estadoMembresia }}
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-
-            </table>
-          </div>
-
-          <p v-else class="mb-0 text-muted">
-            No hay asistencias que coincidan con los filtros seleccionados.
-          </p>
-
+            <Column header="">
+              <template #body="slotProps">
+                <button class="btn btn-success btn-sm" @click="seleccionarCliente(slotProps.data)">
+                  Seleccionar
+                </button>
+              </template>
+            </Column>
+          </DataTable>
         </div>
       </div>
+
+      <div v-if="clienteSeleccionado" class="card mb-4">
+        <div class="card-body">
+          <h5>{{ clienteSeleccionado.nombres }} {{ clienteSeleccionado.apellidos }}</h5>
+          <p class="mb-0 text-muted">
+            RUT: {{ clienteSeleccionado.rut }} · Membresía:
+            {{ clienteSeleccionado.tipo_membresia }}
+          </p>
+        </div>
+      </div>
+
+      <CalendarioAsistencias v-if="eventosCalendario.length" :events="eventosCalendario"
+        titulo="Asistencias del cliente" descripcion="Visualización por día, semana o mes." />
 
     </div>
   </div>
 </template>
 
-
 <script setup>
-import { ref, computed } from 'vue'
+import { ref } from "vue"
+import DataTable from "primevue/datatable"
+import Column from "primevue/column"
+import CalendarioAsistencias from "@/shared/calendarioAsistencias/components/CalendarioAsistencias.vue"
 
-const asistenciasBase = ref([
+
+const clientesBase = [
   {
-    fecha: '2025-11-10',
-    hora: '08:30',
-    nombre: 'Juan Pérez',
-    rut: '12.345.678-9',
-    plan: 'Mensual ilimitado',
-    estadoMembresia: 'Activa'
+    id: 1,
+    rut: "12.345.678-9",
+    nombres: "Juan",
+    apellidos: "Pérez Sáez",
+    tipo_membresia: "Mensual ilimitado",
+    asistencias: [
+      { fecha_entrada: "2025-11-10 08:30", fecha_salida: "2025-11-10 09:15" },
+      { fecha_entrada: "2025-11-10 19:15", fecha_salida: null }
+    ]
   },
   {
-    fecha: '2025-11-10',
-    hora: '19:15',
-    nombre: 'María López',
-    rut: '9.876.543-2',
-    plan: '3 meses',
-    estadoMembresia: 'Activa'
+    id: 2,
+    rut: "11.222.333-4",
+    nombres: "Juan",
+    apellidos: "Díaz Figueroa",
+    tipo_membresia: "3 meses",
+    asistencias: [
+      { fecha_entrada: "2025-11-11 10:00", fecha_salida: "2025-11-11 12:00" }
+    ]
   },
   {
-    fecha: '2025-11-09',
-    hora: '18:05',
-    nombre: 'Carlos Díaz',
-    rut: '11.111.111-1',
-    plan: 'Mensual limitado',
-    estadoMembresia: 'Vencida'
+    id: 3,
+    rut: "9.111.222-3",
+    nombres: "María",
+    apellidos: "Pérez Soto",
+    tipo_membresia: "Mensual ilimitado",
+    asistencias: [
+      { fecha_entrada: "2025-11-09 16:00", fecha_salida: "2025-11-09 17:00" }
+    ]
   }
-])
+]
 
-const filtroTexto = ref('')
-const fechaDesde = ref('')
-const fechaHasta = ref('')
+const busquedaPorNombre = ref(true)
+const rut = ref("")
+const nombreBusqueda = ref("")
+const coincidencias = ref([])
+const clienteSeleccionado = ref(null)
+const eventosCalendario = ref([])
+const buscado = ref(false)
 
-const asistenciasFiltradas = computed(() => {
-  return asistenciasBase.value.filter(a => {
-    const texto = filtroTexto.value.trim().toLowerCase()
+function normalizar(str) {
+  return str
+    .toLowerCase()
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+}
 
-    const coincideTexto =
-      !texto ||
-      a.nombre.toLowerCase().includes(texto) ||
-      a.rut.toLowerCase().includes(texto)
+function palabras(str) {
+  return normalizar(str)
+    .split(/\s+/)
+    .filter(p => p.length > 0)
+}
 
-    const desde = fechaDesde.value
-    const hasta = fechaHasta.value
+function coincide(cliente, termino) {
+  const tParts = palabras(termino)
+  const full = normalizar(cliente.nombres + " " + cliente.apellidos)
+  return tParts.every(p => full.includes(p))
+}
 
-    const enRango =
-      (!desde || a.fecha >= desde) &&
-      (!hasta || a.fecha <= hasta)
+function coincideExacto(cliente, termino) {
+  const tParts = palabras(termino)
+  const cParts = palabras(cliente.nombres + " " + cliente.apellidos)
 
-    return coincideTexto && enRango
-  })
-})
+  if (tParts.length !== cParts.length) return false
+  return tParts.every(p => cParts.includes(p))
+}
 
-const limpiarFiltros = () => {
-  filtroTexto.value = ''
-  fechaDesde.value = ''
-  fechaHasta.value = ''
+function buscar() {
+  buscado.value = true
+  coincidencias.value = []
+  clienteSeleccionado.value = null
+  eventosCalendario.value = []
+
+  if (!busquedaPorNombre.value) {
+    const c = clientesBase.find(cli => cli.rut === rut.value.trim())
+    if (c) seleccionarCliente(c)
+    return
+  }
+
+  const t = nombreBusqueda.value.trim()
+  if (!t) return
+
+  const lista = clientesBase.filter(cli => coincide(cli, t))
+
+  if (lista.length === 1 && coincideExacto(lista[0], t)) {
+    seleccionarCliente(lista[0])
+    return
+  }
+
+  coincidencias.value = lista
+}
+
+function seleccionarCliente(c) {
+  clienteSeleccionado.value = c
+
+  eventosCalendario.value = c.asistencias
+    .map((a, idx) => ({
+      id: `${c.id}-${idx}`,
+      title: `${c.nombres} ${c.apellidos}`,
+      start: a.fecha_entrada,
+      end: a.fecha_salida
+    }))
 }
 </script>
 
-
 <style scoped>
-.contenedor-registro {
-  max-width: 1100px;
-}
-
-.sombra-suave {
-  border-radius: 10px;
-  box-shadow: 0px 3px 12px rgba(0, 0, 0, .08);
-}
-
-.tabla-estilada thead tr {
-  background: #f5f5f5;
-  border-bottom: 2px solid #ddd;
-}
-
-.titulo-seccion h2 {
-  font-size: 1.6rem;
+.form-check-label {
+  cursor: pointer;
 }
 </style>
