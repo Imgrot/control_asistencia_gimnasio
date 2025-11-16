@@ -1,12 +1,12 @@
 <template>
   <div class="d-flex justify-content-center mt-4">
     <div class="w-100" style="max-width: 1100px;">
+
       <h2 class="mb-4 text-center text-md-start">Registro de asistencias de clientes</h2>
 
       <div class="card mb-4">
         <div class="card-body">
           <form class="row g-3" @submit.prevent="buscar">
-
             <div class="col-12 d-flex align-items-center gap-3">
               <span class="fw-semibold">Buscar por:</span>
 
@@ -32,7 +32,6 @@
             <div class="col-md-4 d-flex align-items-end">
               <button type="submit" class="btn btn-primary w-100">Buscar</button>
             </div>
-
           </form>
         </div>
       </div>
@@ -59,6 +58,7 @@
               </template>
             </Column>
           </DataTable>
+
         </div>
       </div>
 
@@ -66,14 +66,14 @@
         <div class="card-body">
           <h5>{{ clienteSeleccionado.nombres }} {{ clienteSeleccionado.apellidos }}</h5>
           <p class="mb-0 text-muted">
-            RUT: {{ clienteSeleccionado.rut }} · Membresía:
-            {{ clienteSeleccionado.tipo_membresia }}
+            RUT: {{ clienteSeleccionado.rut }} · Membresía: {{ clienteSeleccionado.tipo_membresia }}
           </p>
         </div>
       </div>
 
-      <CalendarioAsistencias v-if="eventosCalendario.length" :events="eventosCalendario"
-        titulo="Asistencias del cliente" descripcion="Visualización por día, semana o mes." />
+      <!-- Calendario -->
+      <!-- <CalendarioAsistencias v-show="eventosCalendario.length > 0" :events="eventosCalendario" /> -->
+      <CalendarioPrueba />
 
     </div>
   </div>
@@ -84,7 +84,7 @@ import { ref } from "vue"
 import DataTable from "primevue/datatable"
 import Column from "primevue/column"
 import CalendarioAsistencias from "@/shared/calendarioAsistencias/components/CalendarioAsistencias.vue"
-
+import CalendarioPrueba from "@/shared/calendarioAsistencias/components/CalendarioPrueba.vue"
 
 const clientesBase = [
   {
@@ -131,29 +131,30 @@ const buscado = ref(false)
 function normalizar(str) {
   return str
     .toLowerCase()
-    .trim()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .trim()
 }
 
 function palabras(str) {
-  return normalizar(str)
-    .split(/\s+/)
-    .filter(p => p.length > 0)
+  return normalizar(str).split(/\s+/).filter(p => p.length)
 }
 
 function coincide(cliente, termino) {
-  const tParts = palabras(termino)
-  const full = normalizar(cliente.nombres + " " + cliente.apellidos)
-  return tParts.every(p => full.includes(p))
+  const t = palabras(termino)
+  const c = palabras(cliente.nombres + " " + cliente.apellidos)
+  return t.every(p => c.includes(p))
 }
 
 function coincideExacto(cliente, termino) {
   const tParts = palabras(termino)
   const cParts = palabras(cliente.nombres + " " + cliente.apellidos)
-
   if (tParts.length !== cParts.length) return false
   return tParts.every(p => cParts.includes(p))
+}
+
+function toISO(str) {
+  return str ? str.replace(" ", "T") : null
 }
 
 function buscar() {
@@ -184,13 +185,12 @@ function buscar() {
 function seleccionarCliente(c) {
   clienteSeleccionado.value = c
 
-  eventosCalendario.value = c.asistencias
-    .map((a, idx) => ({
-      id: `${c.id}-${idx}`,
-      title: `${c.nombres} ${c.apellidos}`,
-      start: a.fecha_entrada,
-      end: a.fecha_salida
-    }))
+  eventosCalendario.value = c.asistencias.map((a, idx) => ({
+    id: `${c.id}-${idx}`,
+    title: `${c.nombres} ${c.apellidos}`,
+    start: toISO(a.fecha_entrada),
+    end: a.fecha_salida ? toISO(a.fecha_salida) : null
+  }))
 }
 </script>
 

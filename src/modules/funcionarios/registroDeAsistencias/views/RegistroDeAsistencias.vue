@@ -63,8 +63,8 @@
                 </div>
             </div>
 
-            <CalendarioAsistencias :events="eventosCalendario" titulo="Calendario semanal de asistencias (Funcionarios)"
-                descripcion="Vista semanal de entradas y salidas por funcionario" />
+            <!-- <CalendarioAsistencias :events="eventosCalendario" titulo="Calendario semanal de asistencias (Funcionarios)"
+                descripcion="Vista semanal de entradas y salidas por funcionario" /> -->
         </div>
     </div>
 </template>
