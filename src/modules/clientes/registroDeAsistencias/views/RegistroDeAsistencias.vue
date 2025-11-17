@@ -201,23 +201,59 @@ async function seleccionarCliente(c) {
 async function generarAsistenciasNoSolapadas(cantidad, nombre, apellido) {
   const asistencias = []
   const year = new Date().getFullYear()
+
+
   const ultimoFinPorDia = {}
+
+
+  const MIN_ENTRADA_MIN = 7 * 60
+  const MAX_ENTRADA_MIN = 17 * 60 + 30
 
   for (let i = 0; i < cantidad; i++) {
     const dia = Math.floor(Math.random() * 20) + 1
     const fechaBase = `${year}-11-${dia.toString().padStart(2, "0")}`
 
-    let entradaDate;
+    let entradaDate
+    let entradaMinutos
+
+    const ultimoFinMin = ultimoFinPorDia[fechaBase] ?? null
+
+
+    if (ultimoFinMin !== null && ultimoFinMin >= MAX_ENTRADA_MIN) {
+      continue
+    }
+
+
+    let intentos = 0
+    const MAX_INTENTOS = 50
 
     while (true) {
-      const h = Math.floor(Math.random() * 11) + 7
+      intentos++
+      if (intentos > MAX_INTENTOS) {
+
+        entradaDate = null
+        break
+      }
+
+      const h = Math.floor(Math.random() * 11) + 7 // 7..17
       const m = Math.random() < 0.5 ? 0 : 30
 
-      entradaDate = new Date(year, 10, dia, h, m)
-      const ultimoFin = ultimoFinPorDia[fechaBase] || null
+      entradaMinutos = h * 60 + m
 
-      if (!ultimoFin || entradaDate > ultimoFin) break
+
+      if (entradaMinutos < MIN_ENTRADA_MIN || entradaMinutos > MAX_ENTRADA_MIN) {
+        continue
+      }
+
+
+      if (ultimoFinMin === null || entradaMinutos > ultimoFinMin) {
+        entradaDate = new Date(year, 10, dia, h, m)
+        break
+      }
     }
+
+
+    if (!entradaDate) continue
 
     const entradaStr = `${fechaBase} ${entradaDate
       .getHours()
@@ -229,10 +265,11 @@ async function generarAsistenciasNoSolapadas(cantidad, nombre, apellido) {
     let salidaStr = null
     let endISO = null
     let salidaTexto = null
+    let salidaDate
 
     if (!sinSalida) {
       const duracion = Math.floor(Math.random() * 9) + 1
-      const salidaDate = new Date(entradaDate.getTime())
+      salidaDate = new Date(entradaDate.getTime())
       salidaDate.setHours(salidaDate.getHours() + duracion)
 
       salidaStr = `${fechaBase} ${salidaDate
@@ -242,9 +279,8 @@ async function generarAsistenciasNoSolapadas(cantidad, nombre, apellido) {
 
       endISO = salidaStr.replace(" ", "T")
       salidaTexto = formatearHora(salidaStr)
-      ultimoFinPorDia[fechaBase] = salidaDate
     } else {
-      const salidaDate = new Date(entradaDate.getTime())
+      salidaDate = new Date(entradaDate.getTime())
       salidaDate.setHours(salidaDate.getHours() + 1)
 
       endISO = `${fechaBase}T${salidaDate
@@ -254,8 +290,12 @@ async function generarAsistenciasNoSolapadas(cantidad, nombre, apellido) {
 
       salidaStr = null
       salidaTexto = "Actualmente en el recinto (Sin hora de salida)"
-      ultimoFinPorDia[fechaBase] = salidaDate
     }
+
+
+    const salidaMinutos =
+      salidaDate.getHours() * 60 + salidaDate.getMinutes()
+    ultimoFinPorDia[fechaBase] = salidaMinutos
 
     asistencias.push({
       id: i + 1,
@@ -273,6 +313,7 @@ async function generarAsistenciasNoSolapadas(cantidad, nombre, apellido) {
 
   return asistencias
 }
+
 function formatearHora(fechaStr) {
   if (!fechaStr) return null
   const hora = fechaStr.split(" ")[1]
