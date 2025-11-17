@@ -1,174 +1,248 @@
 <template>
     <div class="d-flex justify-content-center mt-4">
-        <div class="w-100 contenedor-registro">
+        <div class="w-100" style="max-width: 1100px;">
 
-            <div class="titulo-seccion mb-4">
-                <h2 class="fw-bold">Registro de asistencias de funcionarios</h2>
-                <p class="text-muted">Control horario semanal del personal</p>
-            </div>
+            <h2 class="mb-4 text-center text-md-start">Registro de asistencias de Funcionarios</h2>
 
-            <div class="card sombra-suave mb-4">
+            <div class="card mb-4">
                 <div class="card-body">
-                    <form class="row g-3">
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold">Buscar por nombre o RUT</label>
-                            <input v-model="filtroTexto" type="text" class="form-control"
-                                placeholder="Ej: Juan o 12.345.678-9" />
+                    <form class="row g-3" @submit.prevent="buscar">
+                        <div class="col-12 d-flex align-items-center gap-3">
+                            <span class="fw-semibold">Buscar por:</span>
+
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" v-model="busquedaPorNombre">
+                                <label class="form-check-label">
+                                    {{ busquedaPorNombre ? "Nombre" : "RUT" }}
+                                </label>
+                            </div>
                         </div>
-                        <div class="col-md-3">
-                            <label class="form-label fw-semibold">Fecha desde</label>
-                            <input v-model="fechaDesde" type="date" class="form-control" />
+
+                        <div class="col-md-8" v-if="!busquedaPorNombre">
+                            <label class="form-label">RUT</label>
+                            <input v-model="rut" type="text" class="form-control" placeholder="12.345.678-9" />
                         </div>
-                        <div class="col-md-3">
-                            <label class="form-label fw-semibold">Fecha hasta</label>
-                            <input v-model="fechaHasta" type="date" class="form-control" />
+
+                        <div class="col-md-8" v-else>
+                            <label class="form-label">Nombre o Apellidos</label>
+                            <input v-model="nombreBusqueda" type="text" class="form-control"
+                                placeholder="Ej: Carlos / Díaz / Díaz Molina" />
                         </div>
-                        <div class="col-md-2 d-flex align-items-end">
-                            <button type="button" class="btn btn-outline-secondary w-100" @click="limpiarFiltros">
-                                Limpiar
-                            </button>
+
+                        <div class="col-md-4 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary w-100">Buscar</button>
                         </div>
                     </form>
                 </div>
             </div>
 
-            <div class="card sombra-suave mb-4">
+            <div v-if="buscado && coincidencias.length === 0 && !funcionarioSeleccionado" class="alert alert-warning">
+                No se encontraron coincidencias.
+            </div>
+
+            <div v-if="coincidencias.length > 0" class="card mb-4">
                 <div class="card-body">
-                    <h5 class="fw-semibold mb-3">Listado de asistencias</h5>
-                    <div v-if="asistenciasFiltradas.length">
-                        <table class="table table-hover table-striped align-middle mb-0">
-                            <thead>
-                                <tr>
-                                    <th>Fecha</th>
-                                    <th>Hora Entrada</th>
-                                    <th>Funcionario</th>
-                                    <th>RUT</th>
-                                    <th>Cargo</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr v-for="(a, i) in asistenciasFiltradas" :key="i">
-                                    <td>{{ a.fecha }}</td>
-                                    <td>{{ a.hora }}</td>
-                                    <td>{{ a.nombre }}</td>
-                                    <td>{{ a.rut }}</td>
-                                    <td>{{ a.cargo }}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <p v-else class="text-muted mb-0">
-                        No hay asistencias que coincidan con los filtros.
+                    <h5 class="mb-3">Coincidencias encontradas</h5>
+
+                    <DataTable :value="coincidencias" tableStyle="min-width: 100%">
+                        <Column field="rut" header="RUT" />
+                        <Column field="nombres" header="Nombres" />
+                        <Column field="apellidos" header="Apellidos" />
+                        <Column field="cargo" header="Cargo" />
+
+                        <Column header="">
+                            <template #body="slotProps">
+                                <button class="btn btn-success btn-sm" @click="seleccionarFuncionario(slotProps.data)">
+                                    Seleccionar
+                                </button>
+                            </template>
+                        </Column>
+                    </DataTable>
+
+                </div>
+            </div>
+
+            <div v-if="funcionarioSeleccionado" class="card mb-4">
+                <div class="card-body">
+                    <h5>{{ funcionarioSeleccionado.nombres }} {{ funcionarioSeleccionado.apellidos }}</h5>
+                    <p class="mb-0 text-muted">
+                        RUT: {{ funcionarioSeleccionado.rut }} · Cargo: {{ funcionarioSeleccionado.cargo }}
                     </p>
                 </div>
             </div>
 
-            <!-- <CalendarioAsistencias :events="eventosCalendario" titulo="Calendario semanal de asistencias (Funcionarios)"
-                descripcion="Vista semanal de entradas y salidas por funcionario" /> -->
+            <CalendarioAsistencias v-if="mostrarCalendario" :eventos="eventosCalendario" />
+
         </div>
     </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import CalendarioAsistencias from '@/shared/calendarioAsistencias/components/CalendarioAsistencias.vue'
+import { ref } from "vue"
+import DataTable from "primevue/datatable"
+import Column from "primevue/column"
+import CalendarioAsistencias from "@/shared/calendarioAsistencias/components/CalendarioAsistencia.vue"
+import { alertaFallida } from "@/global/alerts/alerts"
 
-const asistenciasBase = ref([
+const funcionariosBase = [
     {
-        fecha: '2025-11-10',
-        hora: '08:30',
-        nombre: 'Carlos Díaz',
-        rut: '11.111.111-1',
-        cargo: 'Entrenador',
-
-        fecha_entrada: '2025-11-10 08:30',
-        fecha_salida: null,
-        nombres: 'Carlos Díaz Molina',
-        tipo: 'funcionario'
+        id: 1,
+        rut: "11.111.111-1",
+        nombres: "Carlos",
+        apellidos: "Díaz Molina",
+        cargo: "Entrenador",
+        asistencias: [
+            { fecha_entrada: "2025-11-10 08:30", fecha_salida: "2025-11-10 12:30" },
+            { fecha_entrada: "2025-11-11 08:28", fecha_salida: "2025-11-11 12:35" },
+            { fecha_entrada: "2025-11-12 14:00", fecha_salida: null } // Aún en el recinto
+        ]
     },
     {
-        fecha: '2025-11-09',
-        hora: '17:45',
-        nombre: 'Pedro González',
-        rut: '12.345.678-9',
-        cargo: 'Recepcionista',
-
-        fecha_entrada: '2025-11-09 17:45',
-        fecha_salida: '2025-11-09 18:30',
-        nombres: 'Pedro González Soto',
-        tipo: 'funcionario'
+        id: 2,
+        rut: "12.345.678-9",
+        nombres: "Pedro",
+        apellidos: "González Soto",
+        cargo: "Recepcionista",
+        asistencias: [
+            { fecha_entrada: "2025-11-09 17:45", fecha_salida: "2025-11-09 18:30" }
+        ]
+    },
+    {
+        id: 3,
+        rut: "9.111.222-3",
+        nombres: "Ana",
+        apellidos: "Martínez",
+        cargo: "Kinesióloga",
+        asistencias: [
+            { fecha_entrada: "2025-11-10 10:00", fecha_salida: "2025-11-10 13:00" },
+            { fecha_entrada: "2025-11-11 10:00", fecha_salida: "2025-11-11 12:00" }
+        ]
     }
-])
+]
 
-const eventosCalendario = ref([])
-const filtroTexto = ref('')
-const fechaDesde = ref('')
-const fechaHasta = ref('')
+const busquedaPorNombre = ref(true)
+const rut = ref("")
+const nombreBusqueda = ref("")
+const coincidencias = ref([])
+const funcionarioSeleccionado = ref(null)
+const buscado = ref(false)
+const mostrarCalendario = ref(false);
+const eventosCalendario = ref([]);
 
-onMounted(() => {
-    eventosCalendario.value = generarEventosFicticios(asistenciasBase.value)
-})
-
-const asistenciasFiltradas = computed(() => {
-    return asistenciasBase.value.filter(a => {
-        const texto = filtroTexto.value.trim().toLowerCase()
-
-        const coincideTexto =
-            !texto ||
-            a.nombre.toLowerCase().includes(texto) ||
-            a.rut.toLowerCase().includes(texto)
-
-        const desde = fechaDesde.value
-        const hasta = fechaHasta.value
-
-        const enRango =
-            (!desde || a.fecha >= desde) &&
-            (!hasta || a.fecha <= hasta)
-
-        return coincideTexto && enRango
-    })
-})
-
-const limpiarFiltros = () => {
-    filtroTexto.value = ''
-    fechaDesde.value = ''
-    fechaHasta.value = ''
+function normalizar(str) {
+    return str
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim()
 }
 
-function generarEventosFicticios(lista) {
-    return lista.map(a => {
-        const start = a.fecha_entrada
-        let end = a.fecha_salida
+function palabras(str) {
+    return normalizar(str).split(/\s+/).filter(p => p.length)
+}
 
-        if (!end) {
-            const d = new Date(start)
-            d.setHours(d.getHours() + 1)
-            end = d.toISOString().slice(0, 16).replace('T', ' ')
+function coincide(cliente, termino) {
+    const t = palabras(termino)
+    const c = palabras(cliente.nombres + " " + cliente.apellidos)
+    return t.every(p => c.includes(p))
+}
+
+function coincideExacto(cliente, termino) {
+    const tParts = palabras(termino)
+    const cParts = palabras(cliente.nombres + " " + cliente.apellidos)
+    if (tParts.length !== cParts.length) return false
+    return tParts.every(p => cParts.includes(p))
+}
+
+function buscar() {
+    mostrarCalendario.value = false;
+    buscado.value = true
+    coincidencias.value = []
+    funcionarioSeleccionado.value = null
+    eventosCalendario.value = []
+
+    if (!busquedaPorNombre.value) {
+        const f = funcionariosBase.find(func => func.rut === rut.value.trim())
+        if (f) seleccionarFuncionario(f)
+        return
+    }
+
+    const t = nombreBusqueda.value.trim()
+    if (!t) return
+
+    const lista = funcionariosBase.filter(func => coincide(func, t))
+
+    if (lista.length === 1 && coincideExacto(lista[0], t)) {
+        seleccionarFuncionario(lista[0]);
+        return
+    }
+
+    coincidencias.value = lista
+}
+
+function seleccionarFuncionario(funcionario) {
+    mostrarCalendario.value = false;
+    funcionarioSeleccionado.value = funcionario;
+    coincidencias.value = []
+
+    const nombreCompleto = `${funcionario.nombres} ${funcionario.apellidos}`
+
+    const eventos = funcionario.asistencias.map((asistencia, index) => {
+
+        const { fecha_entrada, fecha_salida } = asistencia;
+
+        let endISO = null;
+        let salidaTexto = "Actualmente en el recinto";
+
+        if (fecha_salida) {
+            endISO = fecha_salida.replace(" ", "T");
+            salidaTexto = formatearHora(fecha_salida);
+        } else {
+            const d = new Date(fecha_entrada.replace(" ", "T"));
+            d.setHours(d.getHours() + 1);
+            endISO = d.toISOString().slice(0, 16);
         }
 
         return {
-            id: crypto.randomUUID(),
-            title: `${a.nombres} — Entrada`,
-            start,
-            end,
-            color: '#2196f3',
-            tipo: 'funcionario'
-        }
-    })
+            id: `${funcionario.id}-${index}`,
+            title: nombreCompleto,
+            start: fecha_entrada.replace(" ", "T"),
+            end: endISO,
+            extendedProps: {
+                cliente: nombreCompleto,
+                entrada: fecha_entrada,
+                salida: fecha_salida,
+                salidaTexto: salidaTexto
+            }
+        };
+    });
+
+    eventosCalendario.value = eventos;
+
+    if (eventos.length === 0) {
+        alertaFallida("No se encontraron registros de asistencia para este funcionario.");
+        mostrarCalendario.value = false;
+    } else {
+        mostrarCalendario.value = true;
+    }
+}
+
+function formatearHora(fechaStr) {
+    if (!fechaStr) return null
+    const hora = fechaStr.split(" ")[1]
+    let [h, min] = hora.split(":")
+
+    h = Number(h)
+    const suf = h >= 12 ? "PM" : "AM"
+    h = h % 12
+    if (h === 0) h = 12
+
+    return `${h}:${min} ${suf}`
 }
 </script>
 
 <style scoped>
-.contenedor-registro {
-    max-width: 1100px;
-}
-
-.sombra-suave {
-    border-radius: 10px;
-    box-shadow: 0 3px 12px rgba(0, 0, 0, .08);
-}
-
-.titulo-seccion h2 {
-    font-size: 1.6rem;
+.form-check-label {
+    cursor: pointer;
 }
 </style>
