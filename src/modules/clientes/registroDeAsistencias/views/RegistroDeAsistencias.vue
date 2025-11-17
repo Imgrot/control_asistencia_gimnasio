@@ -71,20 +71,18 @@
         </div>
       </div>
 
-      <!-- Calendario -->
-      <!-- <CalendarioAsistencias v-show="eventosCalendario.length > 0" :events="eventosCalendario" /> -->
-      <CalendarioPrueba />
+      <CalendarioAsistencias v-if="mostrarCalendario" :eventos="eventosCalendario" />
 
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from "vue"
+import { ref, toRaw } from "vue"
 import DataTable from "primevue/datatable"
 import Column from "primevue/column"
-import CalendarioAsistencias from "@/shared/calendarioAsistencias/components/CalendarioAsistencias.vue"
-import CalendarioPrueba from "@/shared/calendarioAsistencias/components/CalendarioPrueba.vue"
+import CalendarioAsistencias from "@/shared/calendarioAsistencias/components/CalendarioAsistencia.vue"
+import { alertaFallida } from "@/global/alerts/alerts"
 
 const clientesBase = [
   {
@@ -125,8 +123,9 @@ const rut = ref("")
 const nombreBusqueda = ref("")
 const coincidencias = ref([])
 const clienteSeleccionado = ref(null)
-const eventosCalendario = ref([])
 const buscado = ref(false)
+const mostrarCalendario = ref(false);
+const eventosCalendario = ref([]);
 
 function normalizar(str) {
   return str
@@ -153,16 +152,12 @@ function coincideExacto(cliente, termino) {
   return tParts.every(p => cParts.includes(p))
 }
 
-function toISO(str) {
-  return str ? str.replace(" ", "T") : null
-}
-
 function buscar() {
+  mostrarCalendario.value = false;
   buscado.value = true
   coincidencias.value = []
   clienteSeleccionado.value = null
   eventosCalendario.value = []
-
   if (!busquedaPorNombre.value) {
     const c = clientesBase.find(cli => cli.rut === rut.value.trim())
     if (c) seleccionarCliente(c)
@@ -175,22 +170,120 @@ function buscar() {
   const lista = clientesBase.filter(cli => coincide(cli, t))
 
   if (lista.length === 1 && coincideExacto(lista[0], t)) {
-    seleccionarCliente(lista[0])
+    eventosCalendario.value = seleccionarCliente(lista[0]);
+    if (eventosCalendario.value.length == 0) {
+      mostrarCalendario.value = false;
+      alertaFallida("No se encontraron registros para el cliente.")
+    }
     return
   }
 
   coincidencias.value = lista
 }
 
-function seleccionarCliente(c) {
-  clienteSeleccionado.value = c
+async function seleccionarCliente(c) {
+  mostrarCalendario.value = false;
+  clienteSeleccionado.value = c;
+  eventosCalendario.value = await generarAsistenciasNoSolapadas(
+    10,
+    c.nombres,
+    c.apellidos
+  )
+  let eventos = JSON.parse(JSON.stringify(toRaw(eventosCalendario.value)))
+  console.log(eventos);
+  if (eventos.length == 0) {
+    return alertaFallida("No se encontraron registros para el cliente.")
+  }
+  mostrarCalendario.value = true;
+}
 
-  eventosCalendario.value = c.asistencias.map((a, idx) => ({
-    id: `${c.id}-${idx}`,
-    title: `${c.nombres} ${c.apellidos}`,
-    start: toISO(a.fecha_entrada),
-    end: a.fecha_salida ? toISO(a.fecha_salida) : null
-  }))
+
+async function generarAsistenciasNoSolapadas(cantidad, nombre, apellido) {
+  const asistencias = []
+  const year = new Date().getFullYear()
+  const ultimoFinPorDia = {}
+
+  for (let i = 0; i < cantidad; i++) {
+    const dia = Math.floor(Math.random() * 20) + 1
+    const fechaBase = `${year}-11-${dia.toString().padStart(2, "0")}`
+
+    let entradaDate;
+
+    while (true) {
+      const h = Math.floor(Math.random() * 11) + 7
+      const m = Math.random() < 0.5 ? 0 : 30
+
+      entradaDate = new Date(year, 10, dia, h, m)
+      const ultimoFin = ultimoFinPorDia[fechaBase] || null
+
+      if (!ultimoFin || entradaDate > ultimoFin) break
+    }
+
+    const entradaStr = `${fechaBase} ${entradaDate
+      .getHours()
+      .toString()
+      .padStart(2, "0")}:${entradaDate.getMinutes().toString().padStart(2, "0")}`
+
+    const sinSalida = Math.random() < 0.3
+
+    let salidaStr = null
+    let endISO = null
+    let salidaTexto = null
+
+    if (!sinSalida) {
+      const duracion = Math.floor(Math.random() * 9) + 1
+      const salidaDate = new Date(entradaDate.getTime())
+      salidaDate.setHours(salidaDate.getHours() + duracion)
+
+      salidaStr = `${fechaBase} ${salidaDate
+        .getHours()
+        .toString()
+        .padStart(2, "0")}:${salidaDate.getMinutes().toString().padStart(2, "0")}`
+
+      endISO = salidaStr.replace(" ", "T")
+      salidaTexto = formatearHora(salidaStr)
+      ultimoFinPorDia[fechaBase] = salidaDate
+    } else {
+      const salidaDate = new Date(entradaDate.getTime())
+      salidaDate.setHours(salidaDate.getHours() + 1)
+
+      endISO = `${fechaBase}T${salidaDate
+        .getHours()
+        .toString()
+        .padStart(2, "0")}:${salidaDate.getMinutes().toString().padStart(2, "0")}`
+
+      salidaStr = null
+      salidaTexto = "Actualmente en el recinto (Sin hora de salida)"
+      ultimoFinPorDia[fechaBase] = salidaDate
+    }
+
+    asistencias.push({
+      id: i + 1,
+      title: `${nombre} ${apellido}`,
+      start: entradaStr.replace(" ", "T"),
+      end: endISO,
+      extendedProps: {
+        cliente: `${nombre} ${apellido}`,
+        entrada: entradaStr,
+        salida: salidaStr,
+        salidaTexto
+      }
+    })
+  }
+
+  return asistencias
+}
+function formatearHora(fechaStr) {
+  if (!fechaStr) return null
+  const hora = fechaStr.split(" ")[1]
+  let [h, min] = hora.split(":")
+
+  h = Number(h)
+  const suf = h >= 12 ? "PM" : "AM"
+  h = h % 12
+  if (h === 0) h = 12
+
+  return `${h}:${min} ${suf}`
 }
 </script>
 

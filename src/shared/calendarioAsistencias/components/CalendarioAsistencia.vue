@@ -45,6 +45,8 @@ import interactionPlugin from "@fullcalendar/interaction"
 import esLocale from "@fullcalendar/core/locales/es"
 import * as bootstrap from "bootstrap"
 
+const props = defineProps(['eventos']);
+
 function formatearFecha(fechaStr) {
     if (!fechaStr) return null
     const [y, m, d] = fechaStr.split(" ")[0].split("-")
@@ -69,81 +71,7 @@ function sonMismoDia(entrada, salida) {
     return entrada.split(" ")[0] === salida.split(" ")[0]
 }
 
-function generarAsistenciasNoSolapadas(cantidad, nombre, apellido) {
-    const asistencias = []
-    const year = new Date().getFullYear()
-    const ultimoFinPorDia = {}
 
-    for (let i = 0; i < cantidad; i++) {
-        const dia = Math.floor(Math.random() * 20) + 1
-        const fechaBase = `${year}-11-${dia.toString().padStart(2, "0")}`
-
-        let entradaDate
-
-        while (true) {
-            const h = Math.floor(Math.random() * 11) + 7
-            const m = Math.random() < 0.5 ? 0 : 30
-
-            entradaDate = new Date(year, 10, dia, h, m)
-            const ultimoFin = ultimoFinPorDia[fechaBase] || null
-
-            if (!ultimoFin || entradaDate > ultimoFin) break
-        }
-
-        const entradaStr = `${fechaBase} ${entradaDate
-            .getHours()
-            .toString()
-            .padStart(2, "0")}:${entradaDate.getMinutes().toString().padStart(2, "0")}`
-
-        const sinSalida = Math.random() < 0.3
-
-        let salidaStr = null
-        let endISO = null
-        let salidaTexto = null
-
-        if (!sinSalida) {
-            const duracion = Math.floor(Math.random() * 9) + 1
-            const salidaDate = new Date(entradaDate.getTime())
-            salidaDate.setHours(salidaDate.getHours() + duracion)
-
-            salidaStr = `${fechaBase} ${salidaDate
-                .getHours()
-                .toString()
-                .padStart(2, "0")}:${salidaDate.getMinutes().toString().padStart(2, "0")}`
-
-            endISO = salidaStr.replace(" ", "T")
-            salidaTexto = formatearHora(salidaStr)
-            ultimoFinPorDia[fechaBase] = salidaDate
-        } else {
-            const salidaDate = new Date(entradaDate.getTime())
-            salidaDate.setHours(salidaDate.getHours() + 1)
-
-            endISO = `${fechaBase}T${salidaDate
-                .getHours()
-                .toString()
-                .padStart(2, "0")}:${salidaDate.getMinutes().toString().padStart(2, "0")}`
-
-            salidaStr = null
-            salidaTexto = "Actualmente en el recinto (Sin hora de salida)"
-            ultimoFinPorDia[fechaBase] = salidaDate
-        }
-
-        asistencias.push({
-            id: i + 1,
-            title: `${nombre} ${apellido}`,
-            start: entradaStr.replace(" ", "T"),
-            end: endISO,
-            extendedProps: {
-                cliente: `${nombre} ${apellido}`,
-                entrada: entradaStr,
-                salida: salidaStr,
-                salidaTexto
-            }
-        })
-    }
-
-    return asistencias
-}
 
 const modalData = ref({
     nombre: "",
@@ -161,12 +89,6 @@ onMounted(() => {
     const el = document.getElementById("detalleEventoModal")
     modalInstance = new bootstrap.Modal(el)
 })
-
-const eventos = generarAsistenciasNoSolapadas(
-    10,
-    "María",
-    "Pérez Soto"
-)
 
 const options = ref({
     plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin],
@@ -202,7 +124,7 @@ const options = ref({
         modalInstance.show()
     },
 
-    events: eventos
+    events: props.eventos
 })
 </script>
 
